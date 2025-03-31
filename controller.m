@@ -19,7 +19,7 @@ width_s = 0.1;
 J_x = (1/12) * mass_s * (depth_s^2 + height_s ^ 2);
 J_y = (1/12) * mass_s * (width_s^2 + height_s ^ 2);
 J_z = (1/12) * mass_s * (width_s^2 + depth_s ^ 2);
-J_sat = diag([J_x, J_y, J_z]);
+jSat = diag([J_x, J_y, J_z]);
 
 % Calculate Reaction Wheel Inertia Tensor
 
@@ -27,49 +27,49 @@ J_sat = diag([J_x, J_y, J_z]);
 % Source: Fundamentals of Spacecraft Attitude Determination and Control - Crassidis and Markley
 
 % Euler's rotational equation with Reaction Wheels
-% omega_dot: Time derivate of angular velocity
+% omegaDot: Time derivate of angular velocity
 % J: Body Moment of Inertia
 % T: Net Torque acting on body
 % omega: angular velocity in the body frame
 %
-% omega_dot = inv(J_sat)*[T - omega x (J_sat*omega + J_wheel^(-1)*T_wheel)]
+% omegaDot = inv(jSat)*[T - omega x (jSat*omega + J_wheel^(-1)*T_wheel)]
 
 % Define our symbolic variables
-syms T_wheel_x T_wheel_y T_wheel_z omegaX omegaY omegaZ h_wheel_x h_wheel_y h_wheel_z q1 q2 q3 q4
+syms tWheelX tWheelY tWheelZ omegaX omegaY omegaZ hWheelX hWheelY hWheelZ q1 q2 q3 q4
 
 % spacecraft angular velocity in inertial frame
-omega_sat = [omegaX; omegaY; omegaZ];
+omegaSat = [omegaX; omegaY; omegaZ];
 
 % quaternion vector
 
 q = [q1; q2; q3; q4];
 
 % applied torque from reaction wheels
-T = [T_wheel_x; T_wheel_y; T_wheel_z];
+tWheel = [tWheelX; tWheelY; tWheelZ];
 
 % angular momentum of reaction wheels in body frame
-H_wheel = [h_wheel_x; h_wheel_y; h_wheel_z];
+hWheel = [hWheelX; hWheelY; hWheelZ];
 
-THETA_q = [q4 -q3 q2; q3 q4 -q1; -q2 q1 q4; -q1 -q2 -q3];
+thetaQ = [q4 -q3 q2; q3 q4 -q1; -q2 q1 q4; -q1 -q2 -q3];
 
 % Euler's rotational equation of motion with a reaction wheel
-%omega_dot = inv(J_sat)*(-cross(omega_sat,(J_sat*omega_sat + H_wheel)) - T);
-%omega_dot_no_torque = inv(J_sat)*(-cross(omega_sat,(J_sat*omega_sat + H_wheel)));
+%omegaDot = inv(jSat)*(-cross(omegaSat,(jSat*omega_sat + hWheel)) - T);
+%omegaDot_no_torque = inv(jSat)*(-cross(omegaSat,(jSat*omega_sat + hWheel)));
 
 % Finding control inputs(T) for f(omega, H, T) = 0
-% T_wheel_x = omegaZ(h_wheel_x + (41/960)omegaY) - omegaY(h_wheel_z + (41/4800)omegaZ)
-% T_wheel_y = omegaX(h_wheel_z + (41/4800)omegaZ) - omegaZ(h_wheel_x + (41/960)omegaX)
-% T_wheel_z = omegaY(h_wheel_x + (41/960)omegaX) - omegaX(h_wheel_y + (41/960)omegaY)
+% tWheelX = omegaZ(h_wheel_x + (41/960)omegaY) - omegaY(h_wheel_z + (41/4800)omegaZ)
+% tWheelY = omegaX(h_wheel_z + (41/4800)omegaZ) - omegaZ(h_wheel_x + (41/960)omegaX)
+% tWheelZ = omegaY(h_wheel_x + (41/960)omegaX) - omegaX(h_wheel_y + (41/960)omegaY)
 
-%omega_dot_jacobian = jacobian(omega_dot, [omega_sat; H_wheel]);
-%input_jacobian = jacobian(omega_dot, T);
+%omegaDotJacobian = jacobian(omegaDot, [omegaSat; hWheel]);
+%inputJacobian = jacobian(omegaDot, T);
 %
 %u1 = omegaZ*(h_wheel_x + (41/960)*omegaY) - omegaY*(h_wheel_z + (41/4800)*omegaZ);
 %u2 = omegaX*(h_wheel_z + (41/4800)*omegaZ) - omegaZ*(h_wheel_x + (41/960)*omegaX);
 %u3 = omegaY*(h_wheel_x + (41/960)*omegaX) - omegaX*(h_wheel_y + (41/960)*omegaY);
 %u = [u1; u2; u3];
 
-%omega_dot_linear = omega_dot_jacobian*omega_sat + input_jacobian*u;
+%omegaDotLinear = omegaDotJacobian*omegaSat + input_jacobian*u;
 
 
  
@@ -77,8 +77,8 @@ THETA_q = [q4 -q3 q2; q3 q4 -q1; -q2 q1 q4; -q1 -q2 -q3];
 % Euler's rotational equation can be separated into two equations
 
 % To get the open loop transfer function we look at the system without feedback
-omega_dot = inv(J_sat)*(-cross(omega_sat,(J_sat*omega_sat)) + T);
-h_dot = -cross(omega_sat,H_wheel) - T;
+% omegaDot = inv(jSat)*(-cross(omegaSat,(jSat*omegaSat)) + tWheel);
+% hDot = -cross(omegaSat,hWheel) - tWheel;
 
 %{ 
     From Section 2.7 in Fundamentals of Spacecraft Attitude Determination and Control - Crassidis and Markley
@@ -88,28 +88,53 @@ h_dot = -cross(omega_sat,H_wheel) - T;
     then q_dot = (1/2)*THETA(q)*omega
 
     Finding attitude quaternion error
-    With q_c as a constant desired quaternion
-    delta_q = [ delta_q(1:3); delta_q(4) ]
+    With qDesired as a constant desired quaternion
+    deltaQ = [ deltaQDesired(1:3); deltaQDesired(4) ]
     where
-    delta_q(1:3) = THETA(q_c)' * q
-    delta_q(4) = q' * q_c
+    deltaQ(1:3) = THETA(qDesired)' * q
+    deltaQ(4) = q' * qDesired
 
     Then
-    delta_q_dot = (1/2) * OMEGA(omega) * delta_q
+    deltaQDot = (1/2) * OMEGA(omega) * deltaQ
     where
-    delta_q_dot(1:3) = (1/2) * [0 -delta_q(3) delta_q(2); delta_q(3) 0 -delta_q(1); -delta_q(2) delta_q(1) 0] + (1/2) * delta_q(4)*omega
-    delta_q_dot(4) = -(1/2) * delta_q(1:3)' * omega
+    deltaQDot(1:3) = (1/2) * [0 -deltaQ(3) deltaQ(2); deltaQ(3) 0 -deltaQ(1); -deltaQ(2) deltaQ(1) 0]*omega + (1/2) * deltaQ(4)*omega
+    deltaQDot(4) = -(1/2) * deltaQ(1:3)' * omega
 %}
 
-q_dot = (1/2)*THETA_q*omega_sat;
+qDesired = [0; 0; 0; 1];
+thetaQDesired = [
+            qDesired(4) -qDesired(3) qDesired(2);
+            qDesired(3) qDesired(4) -qDesired(1);
+            -qDesired(2) qDesired(1) qDesired(4);
+            -qDesired(1) -qDesired(2) -qDesired(3);
+            ];
+
+% q.' is used to return the nonconjugate transpose
+deltaQ = [thetaQDesired'*q; q.'*qDesired];
+deltaQDot = sym(zeros(4,1));
+deltaQDot(1:3) = (0.5)*([0 -deltaQ(3) deltaQ(2); deltaQ(3) 0 -deltaQ(1); -deltaQ(2) deltaQ(1) 0])*omegaSat + ((0.5)*deltaQ(4)*omegaSat);
+deltaQDot(4) = -(1/2) * deltaQ(1:3).' * omegaSat;
+
+% Source: Fundamentals of Spacecraft Attitude Determination and Control - Crassidis and Markley
+% Section 7.2 pg. 290
+% From here we have the feedback controller
+% L = -kP*deltaQ(1:3) - kD*omegaSat
+kP = 50;
+kD = 300;
+tWheel = -kP*deltaQ(1:3) - kD*omegaSat;
+
+qDot = (1/2)*thetaQ*omegaSat;
+
+omegaDot = inv(jSat)*(-cross(omegaSat,(jSat*omegaSat)) + tWheel);
+hDot = -cross(omegaSat,hWheel) - tWheel;
 
 % Finding the equilibrium points
 %{
     For a function f(x,u) the equilibrium points will occur where the time
     derivatives of this function are equal to zero.
     So setting 
-    omega_dot = 0 = inv(J_sat)*(-cross(omega_sat,(J_sat*omega_sat)) + T)
-    h_dot = 0 = -cross(omega_sat,H_wheel) - T;
+    omegaDot = 0 = inv(jSat)*(-cross(omegaSat,(jSat*omega_sat)) + T)
+    h_dot = 0 = -cross(omegaSat,hWheel) - T;
     we can find the values of our states and input that correspond to an
     equilibrium point. 
 
@@ -121,29 +146,28 @@ q_dot = (1/2)*THETA_q*omega_sat;
     uY = -hX
 %}
 
-spacecraft_system = [omega_dot; h_dot; q_dot];
+spacecraftSystem = [omegaDot; deltaQDot];
 
-system_jacobian = jacobian(spacecraft_system, [omega_sat; H_wheel; q]);
-input_jacobian = jacobian(spacecraft_system, T);
+systemJacobian = jacobian(spacecraftSystem, [omegaSat; q]);
 
-% Linearize the point around [wX, wY, wZ, hX, hY, hZ] = [(4800/164), -(4800/164), 0, -1, 1, 0]
-% double() around the A and B matrices to convert them to numeric arrays or else ss()
-% will throw an error
-A = double(subs(system_jacobian,[omega_sat; H_wheel; q], [(4800/164); -(4800/164); 0; -1; 1; 0; 0; 0; 0; 1]));
-B = double(input_jacobian);
-C = eye(10,10);
-D = zeros(10,3);
+systemMatrix = double(subs(systemJacobian, [omegaSat; q], [0.53; 0.53; 0.053; 0.6853; 0.6953; 0.1531; 0.1531]));
+inputMatrix = [];
+outputMatrix = eye(7);
+disturbanceMatrix = [];
 
-spacecraftSS = ss(A,B,C,D);
+spacecraftStateSpace = ss(systemMatrix, inputMatrix, outputMatrix, disturbanceMatrix);
 
-% From control theory the transfer function G(s) is given by
-% G(s) = C*((s*I-A)^-1)*B + D
-s = tf('s');
-spacecraftTF = C*inv(s*eye(10,10) - A)*B + D;
+x0 = [0, 0, 0, 0.1, 0.1, 0.1 0.1];
 
-figure(1)
-bode(spacecraftTF)
-title('Bode Plot for Transfer Function Response')
-%figure(2)
-%bode(spacecraftTF)
-%title('Bode Plot for Transfer Function Response')
+figure;
+states = {'\omega_x', '\omega_y', '\omega_z', '\delta_q_1', '\delta_q_2', '\delta_q_3', '\delta_q_4'};
+[~, time, stateTrajectories]  = initial(spacecraftStateSpace, x0);
+title('PD Controller Response for Small Initial Quaternion Error');
+for i=1:length(states)
+    subplot(length(states), 1, i);
+    plot(time, stateTrajectories(:, i))
+    ylabel(states{i});
+    grid on;
+end
+sgtitle('PD Controller Response for Initial Small Quaternion Error')
+xlabel('Time')
