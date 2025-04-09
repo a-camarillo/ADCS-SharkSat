@@ -114,17 +114,24 @@ input_jacobian = jacobian(spacecraft_system, T);
 % Linearize the point around [wX, wY, wZ, hX, hY, hZ] = [(4800/164), -(4800/164), 0, -1, 1, 0]
 % double() around the A and B matrices to convert them to numeric arrays or else ss()
 % will throw an error
-A = double(subs(system_jacobian,[omega_sat; H_wheel; q], [(4800/164); -(4800/164); 0; -1; 1; 0; 0; 0; 0; 1]));
+A = double(subs(system_jacobian,[omega_sat; H_wheel; q], [0; 0; 0; 1; 1; 1; 0; 0; 0; 1]));
+A_mod = [A(1:3,1:7);A(7:10,1:7)];
 B = double(input_jacobian);
-C = eye(10,10);
+B_mod = [B(1:3,:); B(7:10,:)];
+C = [zeros(6,10); zeros(4,6), eye(4,4)];
+C_mod = ones(length(A_mod));
 D = zeros(10,3);
+D_mod = zeros(7,3);
 
-spacecraftSS = ss(A,B,C,D);
+systemObs = obsv(A_mod, C_mod);
+systemCtrb = ctrb(A_mod,B_mod);
+
+spacecraftSS = ss(A_mod,B_mod,C_mod,D_mod);
 
 % From control theory the transfer function G(s) is given by
 % G(s) = C*((s*I-A)^-1)*B + D
 s = tf('s');
-spacecraftTF = C*inv(s*eye(10,10) - A)*B + D;
+spacecraftTF = C_mod*inv(s*eye(7,7) - A_mod)*B_mod + D_mod;
 
 figure(1)
 bode(spacecraftTF)
