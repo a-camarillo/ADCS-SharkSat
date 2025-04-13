@@ -115,27 +115,55 @@ input_jacobian = jacobian(spacecraft_system, T);
 % double() around the A and B matrices to convert them to numeric arrays or else ss()
 % will throw an error
 A = double(subs(system_jacobian,[omega_sat; H_wheel; q], [0; 0; 0; 1; 1; 1; 0; 0; 0; 1]));
-A_mod = [A(1:3,1:7);A(7:10,1:7)];
+A_mod = [A(1:3,1:6);A(7:9,1:6)];
 B = double(input_jacobian);
-B_mod = [B(1:3,:); B(7:10,:)];
+B_mod = [B(1:3,:); B(7:9,:)];
 C = [zeros(6,10); zeros(4,6), eye(4,4)];
-C_mod = ones(length(A_mod));
+C_mod = eye(6);
 D = zeros(10,3);
-D_mod = zeros(7,3);
+D_mod = zeros(6,3);
+
+poles = [-1-1i, -1+1i, -2-1i, -2+1i, -3-1i, -3+1i];
+
+K = place(A_mod, B_mod, poles);
+L = place(A_mod', C_mod', 5*real(poles));
+
+A_feedback_observer = [(A_mod - B_mod*K), B_mod*K; zeros(6), (A_mod - L*C_mod)];
+B_feedback_observer = [B_mod; zeros(6,3)];
 
 systemObs = obsv(A_mod, C_mod);
 systemCtrb = ctrb(A_mod,B_mod);
 
-spacecraftSS = ss(A_mod,B_mod,C_mod,D_mod);
+spacecraftSS = ss(A_feedback_observer,B_feedback_observer,eye(12),zeros(12,3));
 
 % From control theory the transfer function G(s) is given by
 % G(s) = C*((s*I-A)^-1)*B + D
 s = tf('s');
-spacecraftTF = C_mod*inv(s*eye(7,7) - A_mod)*B_mod + D_mod;
+spacecraftTF = spacecraftSS.C*inv(s*eye(12) - spacecraftSS.A)*spacecraftSS.B + spacecraftSS.D;
 
-figure(1)
-bode(spacecraftTF)
-title('Bode Plot for Transfer Function Response')
+[sys_response, tOut] = initial(spacecraftSS, [0,0,0,0,0,0,1,1,1,1,1,1]);
+
+%figure(1)
+%plot(tOut, sys_response)
+%title('System Initial Response')
+
+states = ["{\omega}_x", "{\omega}_y", "{\omega}_z", "q_1", "q_2", "q_3"];
+
+for j=1:3
+    for i=1:6
+        switch j
+            case 1
+                figure(i)
+            case 2
+                figure(6+i)
+            case 3
+                figure(12+i)
+        end
+        nyquistplot(spacecraftTF(i,j))
+        title(['Output: ', char(states(i)), 'for Input: ', num2str(j)])
+    end
+end
+
 %figure(2)
 %bode(spacecraftTF)
 %title('Bode Plot for Transfer Function Response')
