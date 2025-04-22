@@ -97,13 +97,6 @@ q_dot = (1/2)*THETA_q*omega_sat;
     h_dot = 0 = -cross(omega_sat,H_wheel) - T;
     we can find the values of our states and input that correspond to an
     equilibrium point. 
-
-    From setting wZ = 1, uZ=hZ=0
-    It is found that
-    wX = (4800/164)uY
-    wY = -(4800/164)uX
-    uX = hY
-    uY = -hX
 %}
 
 spacecraft_system = [omega_dot; h_dot; q_dot];
@@ -111,10 +104,10 @@ spacecraft_system = [omega_dot; h_dot; q_dot];
 system_jacobian = jacobian(spacecraft_system, [omega_sat; H_wheel; q]);
 input_jacobian = jacobian(spacecraft_system, T);
 
-% Linearize the point around [wX, wY, wZ, hX, hY, hZ] = [(4800/164), -(4800/164), 0, -1, 1, 0]
-% double() around the A and B matrices to convert them to numeric arrays or else ss()
-% will throw an error
-A = double(subs(system_jacobian,[omega_sat; H_wheel; q], [0; 0; 0; 1; 1; 1; 0; 0; 0; 1]));
+% Linearize the point around [wX, wY, wZ, hX, hY, hZ, q1, q2, q3, q4] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+% double() around the A and B matrices to convert them to numeric arrays or else system
+% functions will throw an error
+A = double(subs(system_jacobian,[omega_sat; H_wheel; q], [0; 0; 0; 0; 0; 0; 0; 0; 0; 1]));
 A_mod = [A(1:3,1:6);A(7:9,1:6)];
 B = double(input_jacobian);
 B_mod = [B(1:3,:); B(7:9,:)];
@@ -128,11 +121,31 @@ poles = [-1-1i, -1+1i, -2-1i, -2+1i, -3-1i, -3+1i];
 K = place(A_mod, B_mod, poles);
 L = place(A_mod', C_mod', 5*real(poles));
 
+Q = [
+     1, 0, 0, 0 ,0, 0;
+     0, 1, 0, 0, 0, 0;
+     0, 0, 1, 0, 0, 0;
+     0, 0, 0, 1, 0, 0;
+     0, 0, 0, 0, 1, 0;
+     0, 0, 0, 0, 0, 1;
+];
+
+R = [
+     1, 0, 0;
+     0, 1, 0;
+     0, 0, 1;
+];
+
+
+lqrGain = lqr(A_mod, B_mod, Q, R);
+
 A_feedback_observer = [(A_mod - B_mod*K), B_mod*K; zeros(6), (A_mod - L*C_mod)];
 B_feedback_observer = [B_mod; zeros(6,3)];
 
 systemObs = obsv(A_mod, C_mod);
 systemCtrb = ctrb(A_mod,B_mod);
+
+spacecraftLQR = ss(A_mod-B_mod*lqrGain, B_mod, C_mod, D_mod);
 
 spacecraftSS = ss(A_feedback_observer,B_feedback_observer,eye(12),zeros(12,3));
 
@@ -142,27 +155,30 @@ s = tf('s');
 spacecraftTF = spacecraftSS.C*inv(s*eye(12) - spacecraftSS.A)*spacecraftSS.B + spacecraftSS.D;
 
 [sys_response, tOut] = initial(spacecraftSS, [0,0,0,0,0,0,1,1,1,1,1,1]);
+[sysResponseLQR, tOutLQR] = initial(spacecraftLQR,[0,0,0,1,1,1]);
 
-%figure(1)
-%plot(tOut, sys_response)
-%title('System Initial Response')
 
-states = ["{\omega}_x", "{\omega}_y", "{\omega}_z", "q_1", "q_2", "q_3"];
+figure(1)
+plot(tOutLQR, sysResponseLQR)
+title('System Initial Response')
 
-for j=1:3
-    for i=1:6
-        switch j
-            case 1
-                figure(i)
-            case 2
-                figure(6+i)
-            case 3
-                figure(12+i)
-        end
-        nyquistplot(spacecraftTF(i,j))
-        title(['Output: ', char(states(i)), 'for Input: ', num2str(j)])
-    end
-end
+
+%states = ["{\omega}_x", "{\omega}_y", "{\omega}_z", "q_1", "q_2", "q_3"];
+%
+%for j=1:3
+%    for i=1:6
+%        switch j
+%            case 1
+%                figure(i)
+%            case 2
+%                figure(6+i)
+%            case 3
+%                figure(12+i)
+%        end
+%        nyquistplot(spacecraftTF(i,j))
+%        title(['Output: ', char(states(i)), 'for Input: ', num2str(j)])
+%    end
+%end
 
 %figure(2)
 %bode(spacecraftTF)
